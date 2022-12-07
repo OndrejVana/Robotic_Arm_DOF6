@@ -1,5 +1,20 @@
 #include <Arduino.h>
 #include <math.h>
+#include <SPI.h>
+
+// Defines
+
+#define SL1 5
+#define SL2 17
+#define SL3 16
+#define SL4 4
+#define SL5 0
+#define SL6 2
+#define SLnum
+
+#define LED1 14
+#define LED2 12
+#define LED3 13 
 
 // Global variables
 double DH[6][4] = {{0.01, -90, 220, 3.5},
@@ -10,6 +25,143 @@ double DH[6][4] = {{0.01, -90, 220, 3.5},
                   {0.01, 0, 44, 0}};
 int Q;
 double time_d = 0;
+char Angle_type;
+double ResVal[6] = {};
+double limits[6][2] = {{},{},{},{},{},{}}; // MAX, MIN
+//SPI Communication
+int SPI_com(int message, int slave)
+{
+  int resMess = 0; 
+  switch (slave)
+  {
+  case 1:
+    digitalWrite(SL1, LOW);
+    digitalWrite(SL2, HIGH);
+    digitalWrite(SL3, HIGH);
+    digitalWrite(SL4, HIGH);
+    digitalWrite(SL5, HIGH);
+    digitalWrite(SL6, HIGH);
+    resMess = SPI.transfer16(message);
+    break;
+  case 2:
+    digitalWrite(SL1, HIGH);
+    digitalWrite(SL2, LOW);
+    digitalWrite(SL3, HIGH);
+    digitalWrite(SL4, HIGH);
+    digitalWrite(SL5, HIGH);
+    digitalWrite(SL6, HIGH);
+    resMess = SPI.transfer16(message);
+    break;
+  case 3:
+    digitalWrite(SL1, HIGH);
+    digitalWrite(SL2, HIGH);
+    digitalWrite(SL3, LOW);
+    digitalWrite(SL4, HIGH);
+    digitalWrite(SL5, HIGH);
+    digitalWrite(SL6, HIGH);
+    resMess = SPI.transfer16(message);
+    break;
+  case 4:
+    digitalWrite(SL1, HIGH);
+    digitalWrite(SL2, HIGH);
+    digitalWrite(SL3, HIGH);
+    digitalWrite(SL4, LOW);
+    digitalWrite(SL5, HIGH);
+    digitalWrite(SL6, HIGH);
+    resMess = SPI.transfer16(message);
+    break;
+  case 5:
+    digitalWrite(SL1, HIGH);
+    digitalWrite(SL2, HIGH);
+    digitalWrite(SL3, HIGH);
+    digitalWrite(SL4, HIGH);
+    digitalWrite(SL5, LOW);
+    digitalWrite(SL6, HIGH);
+    resMess = SPI.transfer16(message);
+    break;
+  case 6:
+    digitalWrite(SL1, HIGH);
+    digitalWrite(SL2, HIGH);
+    digitalWrite(SL3, HIGH);
+    digitalWrite(SL4, HIGH);
+    digitalWrite(SL5, HIGH);
+    digitalWrite(SL6, LOW);
+    resMess = SPI.transfer16(message);
+    break;
+  default:
+    return 0;
+    break;
+  }
+  digitalWrite(SL1, HIGH);
+  digitalWrite(SL2, HIGH);
+  digitalWrite(SL3, HIGH);
+  digitalWrite(SL4, HIGH);
+  digitalWrite(SL5, HIGH);
+  digitalWrite(SL6, HIGH);
+
+  if(message != resMess){
+    return 0;
+  }
+  else{
+    return 1;
+  }
+  
+}
+
+void TransSPI()
+{
+  int count = 1;
+  int err = 0;
+  while(count < SLnum + 1)
+  {
+    if(SPI_com(DH[count-1][0], count) == 1)
+    {
+      count++;
+    }
+    err++;
+    if(err > count + 10)
+    {
+      count++;
+    }
+  }
+  if(err < count + 10)
+  {
+    digitalWrite(LED1, HIGH);
+    delay(120);
+    digitalWrite(LED1, LOW);
+  }
+  else
+  {
+    digitalWrite(LED1, HIGH);
+    delay(100);
+    digitalWrite(LED1, LOW);
+    delay(100);
+    digitalWrite(LED1, HIGH);
+    delay(100);
+    digitalWrite(LED1, LOW); 
+  }
+  
+}
+
+//Value limitation MAX, MIN
+double ValLim(double val, double maxV, double minV)
+{
+  if(val >= maxV)
+  {
+    digitalWrite(LED2, HIGH);
+    return maxV;
+  }
+  else if(val <= minV)
+  {
+    digitalWrite(LED2, HIGH);
+    return minV;
+  }
+  else
+  {
+    digitalWrite(LED2, LOW);
+    return val;
+  }
+}
 
 //Rotational matrix 
 void RotMat(double angle, double alpha, double d, double a, double(*M)[4])
@@ -160,9 +312,9 @@ void InverseKinematics(double Xcor, double Ycor, double Zcor, double y_cor, doub
   }
 
   //DH table update
-  DH[0][0] = angle_J1;
-  DH[1][0] = degrees(angle_J2);
-  DH[2][0] = degrees(angle_J3);
+  DH[0][0] = ValLim(angle_J1, limits[0][0], limits[0][1]);
+  DH[1][0] = ValLim(degrees(angle_J2), limits[1][0], limits[1][1]);
+  DH[2][0] = ValLim(degrees(angle_J3), limits[2][0], limits[2][1]);
 
   //J1 Matrix
   double J1[4][4] = {{0}};
@@ -201,19 +353,58 @@ void InverseKinematics(double Xcor, double Ycor, double Zcor, double y_cor, doub
   }
 
   //DH update
-  DH[3][0] = degrees(angle_J4);
-  DH[4][0] = degrees(angle_J5);
-  DH[5][0] = degrees(angle_J6);
+  DH[3][0] = ValLim(degrees(angle_J4), limits[3][0], limits[3][1]);
+  DH[4][0] = ValLim(degrees(angle_J5), limits[4][0], limits[4][1]);
+  DH[5][0] = ValLim(degrees(angle_J6), limits[5][0], limits[5][1]);
 
   time_d = micros() - time_s;
 }
 
 void setup() {
+
+  pinMode(SL1, OUTPUT);
+  pinMode(SL2, OUTPUT);
+  pinMode(SL3, OUTPUT);
+  pinMode(SL4, OUTPUT);
+  pinMode(SL5, OUTPUT);
+  pinMode(SL6, OUTPUT);
+
+  pinMode(LED1, OUTPUT);
+  pinMode(LED2, OUTPUT);
+  pinMode(LED3, OUTPUT); 
+
   Serial.begin(9600);
+  
+  SPI.begin();
+  SPI.setClockDivider(LSBFIRST);
 
 }
 
-void loop() {
+void loop() 
+{
+
+  if(Angle_type == 'D')
+  {
+    Serial.println("Direct control");
+    for(int i = 0; i < 6; i++)
+    {
+      DH[i][0] = ValLim(ResVal[i], limits[i][0], limits[i][1]);
+    }
+    TransSPI();
+
+  }
+  else if(Angle_type == 'I')
+  {
+    Serial.print("Inverse kinematics");
+    InverseKinematics(ResVal[0], ResVal[1], ResVal[2], ResVal[3], ResVal[4], ResVal[5]);
+    TransSPI();
+  }
+  else
+  {
+    Serial.println("Unknown command!");
+  }
+  
+  /*
   InverseKinematics(200, 200, 300, 10, 20, 30);
 
   for(int i = 0; i < 6; i++)
@@ -228,4 +419,5 @@ void loop() {
   Serial.println("----------------");
 
 delay(5000);
+*/
 }
