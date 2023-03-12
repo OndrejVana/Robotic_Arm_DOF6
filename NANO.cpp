@@ -40,9 +40,13 @@ double ResVal[6] = {};
 double limits[6][2] = {{360, -360},{360, -360},{360, -360},{360, -360},{360, -360},{360, -360}}; // MAX, MIN
 
 //SPI Communication
-int SPI_com(uint8_t message, int slave)
+int SPI_com(uint16_t message, int slave)
 {
-  uint8_t resMess = 0; 
+  uint8_t mess_H =  message;
+  uint8_t mess_L = message >> 8;
+  uint8_t resMess_L = 0;
+  uint8_t resMess_H = 0; 
+  uint16_t resMess = 0;
   Serial.print("Slave: ");
   Serial.println(slave);
   switch (slave)
@@ -54,8 +58,8 @@ int SPI_com(uint8_t message, int slave)
     digitalWrite(SL4, HIGH);
     digitalWrite(SL5, HIGH);
     digitalWrite(SL6, HIGH);
-    //delay(500);
-    resMess = SPI.transfer(message);
+    resMess_L = SPI.transfer(mess_L);
+    resMess_H = SPI.transfer(mess_H);
     break;
   case 2:
     digitalWrite(SL1, HIGH);
@@ -64,8 +68,8 @@ int SPI_com(uint8_t message, int slave)
     digitalWrite(SL4, HIGH);
     digitalWrite(SL5, HIGH);
     digitalWrite(SL6, HIGH);
-    //delay(500);
-    resMess = SPI.transfer(message);
+    resMess_L = SPI.transfer(mess_L);
+    resMess_H = SPI.transfer(mess_H);
     break;
   case 3:
     digitalWrite(SL1, HIGH);
@@ -74,8 +78,8 @@ int SPI_com(uint8_t message, int slave)
     digitalWrite(SL4, HIGH);
     digitalWrite(SL5, HIGH);
     digitalWrite(SL6, HIGH);
-    //delay(500);
-    resMess = SPI.transfer(message);
+    resMess_L = SPI.transfer(mess_L);
+    resMess_H = SPI.transfer(mess_H);
     break;
   case 4:
     digitalWrite(SL1, HIGH);
@@ -84,8 +88,8 @@ int SPI_com(uint8_t message, int slave)
     digitalWrite(SL4, LOW);
     digitalWrite(SL5, HIGH);
     digitalWrite(SL6, HIGH);
-    //delay(500);
-    resMess = SPI.transfer(message);
+    resMess_L = SPI.transfer(mess_L);
+    resMess_H = SPI.transfer(mess_H);   
     break;
   case 5:
     digitalWrite(SL1, HIGH);
@@ -94,8 +98,8 @@ int SPI_com(uint8_t message, int slave)
     digitalWrite(SL4, HIGH);
     digitalWrite(SL5, LOW);
     digitalWrite(SL6, HIGH);
-    //delay(500);
-    resMess = SPI.transfer(message);
+    resMess_L = SPI.transfer(mess_L);
+    resMess_H = SPI.transfer(mess_H);
     break;
   case 6:
     digitalWrite(SL1, HIGH);
@@ -104,22 +108,31 @@ int SPI_com(uint8_t message, int slave)
     digitalWrite(SL4, HIGH);
     digitalWrite(SL5, HIGH);
     digitalWrite(SL6, LOW);
-    //delay(500);
-    resMess = SPI.transfer(message);
+    resMess_L = SPI.transfer(mess_L);
+    resMess_H = SPI.transfer(mess_H);
     break;
   default:
     SPI.endTransaction();
     return 0;
     break;
   }
-  
-  
+  Serial.print("Message: ");
   Serial.println(message);
+  Serial.print("Message L: ");
+  Serial.println(mess_L);
+  Serial.print("Message H: ");
+  Serial.println(mess_H);
+  Serial.print("Receive message H: ");
+  Serial.println(resMess_H);
+  Serial.print("Receive message L: ");
+  Serial.println(resMess_L);
+  resMess = resMess_L << 8;
+  resMess = resMess | resMess_H;
+  Serial.print("Receive message: ");
   Serial.println(resMess);
 
   if(message == resMess){
     Serial.println("OK");
-    //SPI.endTransaction();
     delay(500);
     digitalWrite(SL1, HIGH);
   	digitalWrite(SL2, HIGH);
@@ -130,7 +143,6 @@ int SPI_com(uint8_t message, int slave)
     return 1;
   }
   else{
-    //SPI.endTransaction();
     delay(500);
     digitalWrite(SL1, HIGH);
   	digitalWrite(SL2, HIGH);
@@ -140,9 +152,7 @@ int SPI_com(uint8_t message, int slave)
   	digitalWrite(SL6, HIGH);
     return 0;
   }
-  
 }
-
 void TransSPI()
 {
   int count = 1;
@@ -395,12 +405,12 @@ void InverseKinematics(double Xcor, double Ycor, double Zcor, double y_cor, doub
 
   //J4, J5 and J6 calculation
   double angle_J4, angle_J5, angle_J6;
-  if(DH[3][0] >= 0){
+  if(DH[4][0] >= 0){
     angle_J5 = atan2(sqrt(1 - R36[2][2]*R36[2][2]), R36[2][2]);
     angle_J4 = atan2(R36[1][2], R36[0][2]);
     angle_J6 = atan2(R36[2][1], -R36[2][0]);
   }
-  else if(DH[3][0] < 0){
+  else if(DH[4][0] < 0){
     angle_J5 = atan2(- sqrt(1 - R36[2][2]*R36[2][2]), R36[2][2]);
     angle_J4 = atan2(-R36[1][2], -R36[0][2]);
     angle_J6 = atan2(-R36[2][1], R36[2][0]);
