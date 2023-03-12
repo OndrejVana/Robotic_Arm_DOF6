@@ -3,14 +3,18 @@
 #include <avr/interrupt.h>
 #include <Wire.h>
 
-#define DIR 1
-#define PUL 2
+// pin defines
+#define DIRE 2
+#define PUL 1
 #define LED 3
 
-#define S_speed 500 
-#define F_speed 5000
-#define kp 5
+// user defines
+#define S_speed 600 
+#define F_speed 2600
+#define SenTimeFrq 250
+#define I2Ctime 500
 
+//SPI pin defines
 #define MOSI_bp 1
 #define MOSI_bm (1 << MOSI_bp)
 #define MISO_bp 2
@@ -20,29 +24,40 @@
 #define SS_bp 4
 #define SS_bm (1 << SS_bp)
 
-#define DUMMY 0xFF
+// Mainloop variables
+double SenVal;
+long SenTime;
 
+// I2C addresses 
 int adrr = 0x36;
 int raw_ang_hi = 0x0c;
 int raw_ang_lo = 0x0d;
 int ang_hi = 0x0e;
 int ang_lo = 0x0f;
 
-int Ldata = 0;
+// Sensor reading variables
+word high;
+int low;		
+word retVal = -1;
+int val;
 
-volatile uint8_t receiveData = 0;
+// SPI reading variables
+uint8_t receiveData = 0;
+uint8_t receiveData_L = 0;
+uint8_t receiveData_H = 0;
+uint8_t writeData = 0;
+uint8_t writeData_L = 0;
+uint8_t writeData_H = 0;
+int b_count = 1;
+uint16_t Ldata = 0;
 
-volatile uint8_t writeData = 0;
+// P regulator variables
+int wait_time;
+int kp = 5;
 
-
+// SPI setup
 void SPI0_init(void)
 {
-	/*
- PORTA.DIR &= ~MOSI_bm; 
- PORTA.DIR |= MISO_bm; 
- PORTA.DIR &= ~SCK_bm; 
- PORTA.DIR &= ~PIN7_bm; 
- */
  PORTA.DIRSET = MISO_bm;
  
   SPI0.CTRLB =
@@ -54,35 +69,39 @@ void SPI0_init(void)
  SPI0.INTCTRL = SPI_IE_bm; /* SPI Interrupt enable */
 }
 
+// SPI interrupt
 ISR(SPI0_INT_vect)
 {
- receiveData = SPI0.DATA;
+  receiveData = SPI0.DATA;
+ if(b_count == 1)
+ {
+ 	receiveData_L = receiveData;
+ 	b_count++;
+ }
+ else if(b_count == 2)
+ {
+ 	receiveData_H = receiveData;
+ 	Ldata = 0;
+ 	Ldata = receiveData_L << 8;
+ 	Ldata = Ldata | receiveData_H;
+ 	b_count--;
+ }
+ 
  writeData = receiveData; 
- Ldata = receiveData;
  SPI0.DATA = writeData;
  SPI0.INTFLAGS = SPI_IF_bm; /* Clear the Interrupt flag by writing 1 */
 }
 
 void setup() 
 {
-  pinMode(DIR, OUTPUT);
+  pinMode(DIRE, OUTPUT);
   pinMode(PUL, OUTPUT);
   pinMode(LED, OUTPUT);
+
+  Wire.begin();
 }
 
-void cos_delay(int time)
-{
-  int time_s = millis();
-  while (true)
-  {
-    if(millis() - time_s > time)
-    {
-      return;
-    }
-  }
-
-}
-
+// solving the direction of turnig 
 bool find_dir(double val_r, double val_s)
 {
   if(val_r > val_s)
@@ -95,17 +114,24 @@ bool find_dir(double val_r, double val_s)
   }
 }
 
-void step(double set_angle, double real_angle)
+// stepping a motor with P regulator 
+void stepp(double set_angle, double real_angle)
 {
-  int wait_time = abs(set_angle - real_angle) * kp;
+  wait_time = abs(set_angle - real_angle) * kp;
   wait_time = F_speed - wait_time;
   wait_time = constrain(wait_time, S_speed, F_speed);
-  digitalWrite(DIR, find_dir(real_angle, set_angle));
+  digitalWrite(DIRE, find_dir(real_angle, set_angle));
   digitalWrite(PUL, HIGH);
-  cos_delay(wait_time);
+  delayMicroseconds(wait_time);
   digitalWrite(PUL, LOW);
+  delayMicroseconds(wait_time);
+  digitalWrite(PUL, HIGH);
+  delayMicroseconds(wait_time);
+  digitalWrite(PUL, LOW);
+  delayMicroseconds(wait_time);
 }
 
+// solving an angle of multi rotation system
 double re_cal_angle(double angle_new, double angle_last)
 {
   double diff = angle_new - angle_last;
@@ -122,32 +148,52 @@ double re_cal_angle(double angle_new, double angle_last)
   return angle_last + diff;
 }
 
+// reading a value of angle 
 double ReadAngle()
 {
-  word retVal = -1;
-
+  int timeW;
+  digitalWrite(LED, HIGH);
+ 
   //Read Low Byte
   Wire.beginTransmission(adrr);
-  Wire.write(ang_lo);
+  Wire.write(raw_ang_lo);
   Wire.endTransmission();
   Wire.requestFrom(adrr, 1);
-  while(Wire.available() == 0);
-  word low = Wire.read();
+  timeW = millis();
+  while(Wire.available() == 0)
+  {
+  	if((millis() - timeW) > I2Ctime)
+  	{
+  		break;
+  	}
+  }
+  low = Wire.read();
  
   // Read High Byte  
   Wire.beginTransmission(adrr);
   Wire.write(ang_hi);
   Wire.endTransmission();
   Wire.requestFrom(adrr, 1);
-  while(Wire.available() == 0);
-  word high = Wire.read();
-  
+  timeW = millis();
+  while(Wire.available() == 0)
+  {
+  	if((millis() - timeW) > I2Ctime)
+  	{
+  		break;
+  	}
+  }
+  high = Wire.read();
+  //combine two bytes
   high = high << 8;
   retVal = high | low;
+  int newAng = 0.087 * retVal;
+
+  digitalWrite(LED, LOW);
   
-  return retVal;
+  return newAng;
 }
 
+// startup LED sequence 
 void startup()
 {
   for(int i = 0; i < 3; i++)
@@ -163,9 +209,16 @@ void loop()
 {
   SPI0_init();
  	sei(); //global interrups
-  startup();
+  startup(); //start diode indicator
+  SenTime = millis();
+  SenVal = ReadAngle(); //first angle readings
   while(true)
   {
-    step(Ldata, ReadAngle());
+  	if((millis() - SenTime) > SenTimeFrq)
+  	{
+  		SenTime = millis();
+  		SenVal = ReadAngle(); //angle reading
+  	}
+    stepp(Ldata, SenVal); 
   }
 }
