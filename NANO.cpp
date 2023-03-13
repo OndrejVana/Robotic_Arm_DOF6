@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include <math.h>
 #include <SPI.h>
+#include <Servo.h>
 
 // Defines
 
@@ -20,11 +21,13 @@
 #define LED3 A0 
 
 #define SERVOPWM 3
+#define servo_open 1000
+#define servo_close 1500
 
 #define P1 2
 #define P2 4
 
-
+Servo servo1;
 
 // Global variables
 double DH[6][4] = {{0.01, -90, 220, 3.5},
@@ -36,6 +39,7 @@ double DH[6][4] = {{0.01, -90, 220, 3.5},
 int Q;
 double time_d = 0;
 char Angle_type;
+int servo_res;
 double ResVal[6] = {};
 double limits[6][2] = {{360, -360},{360, -360},{360, -360},{360, -360},{360, -360},{360, -360}}; // MAX, MIN
 
@@ -47,8 +51,11 @@ int SPI_com(uint16_t message, int slave)
   uint8_t resMess_L = 0;
   uint8_t resMess_H = 0; 
   uint16_t resMess = 0;
-  Serial.print("Slave: ");
-  Serial.println(slave);
+  if(Angle_type == 'i'|| Angle_type == 'd')
+  {
+  	Serial.print("Slave: ");
+  	Serial.println(slave);
+  }
   switch (slave)
   {
   case 1:
@@ -118,14 +125,18 @@ int SPI_com(uint16_t message, int slave)
   }
   Serial.print("Message: ");
   Serial.println(message);
-  Serial.print("Message L: ");
-  Serial.println(mess_L);
-  Serial.print("Message H: ");
-  Serial.println(mess_H);
-  Serial.print("Receive message H: ");
-  Serial.println(resMess_H);
-  Serial.print("Receive message L: ");
-  Serial.println(resMess_L);
+  if(Angle_type == 'i'|| Angle_type == 'd')
+  {
+  	Serial.print("Message L: ");
+  	Serial.println(mess_L);
+  	Serial.print("Message H: ");
+  	Serial.println(mess_H);
+  	Serial.print("Receive message L: ");
+  	Serial.println(resMess_L);
+  	Serial.print("Receive message H: ");
+  	Serial.println(resMess_H);
+  	
+  }
   resMess = resMess_L << 8;
   resMess = resMess | resMess_H;
   Serial.print("Receive message: ");
@@ -160,8 +171,12 @@ void TransSPI()
   int sent_err = 0; 
   while(count < SLnum + 1)
   {
-    Serial.print("TRY: ");
-    Serial.println(err);
+  	if(Angle_type == 'i'|| Angle_type == 'd')
+  	{
+  		Serial.print("TRY: ");
+    	Serial.println(err);
+  	}
+    
     if(SPI_com(DH[count-1][0], count) == 1)
     {
       count++;
@@ -173,7 +188,10 @@ void TransSPI()
     
     if(err > 10)
     {
-      Serial.println("ERR NEXT");
+    	if(Angle_type == 'i'|| Angle_type == 'd')
+    	{
+    		Serial.println("ERR NEXT");
+    	}
       count++;
       sent_err++;
       err = 0;
@@ -183,7 +201,10 @@ void TransSPI()
     	digitalWrite(LED1, HIGH);
     	delay(120);
     	digitalWrite(LED1, LOW);
-    	Serial.println("SEND");
+    	if(Angle_type == 'i'|| Angle_type == 'd')
+    	{
+    		Serial.println("SEND");
+    	}
     }
   }
   if(sent_err == 0)
@@ -405,12 +426,12 @@ void InverseKinematics(double Xcor, double Ycor, double Zcor, double y_cor, doub
 
   //J4, J5 and J6 calculation
   double angle_J4, angle_J5, angle_J6;
-  if(DH[4][0] >= 0){
+  if(DH[3][0] >= 0){
     angle_J5 = atan2(sqrt(1 - R36[2][2]*R36[2][2]), R36[2][2]);
     angle_J4 = atan2(R36[1][2], R36[0][2]);
     angle_J6 = atan2(R36[2][1], -R36[2][0]);
   }
-  else if(DH[4][0] < 0){
+  else if(DH[3][0] < 0){
     angle_J5 = atan2(- sqrt(1 - R36[2][2]*R36[2][2]), R36[2][2]);
     angle_J4 = atan2(-R36[1][2], -R36[0][2]);
     angle_J6 = atan2(-R36[2][1], R36[2][0]);
@@ -434,7 +455,24 @@ void ReadPos()
   //Serial.println(mess);
   Angle_type = mess[0];
   //Serial.println(Angle_type);
-  int i = 1;
+  if(Angle_type == 'S' || Angle_type == 's')
+  {
+  	String ser_h;
+  	int i = 1;
+  	while(mess[i] != ';')
+  	{
+  		ser_h = ser_h + mess[i];
+  		i++;
+  		if(i > 3)
+  		{
+  			break;
+  		}
+  	}
+  	servo_res = ser_h.toInt();
+  }
+  else
+  {
+  	int i = 1;
   int last = 1;
   int end = 1;
   int count = 0;
@@ -468,6 +506,8 @@ void ReadPos()
     }
     last++;
     i++;
+  }
+  	
   }
 }
 
@@ -548,6 +588,12 @@ void test()
 
 }
 
+void servo(int val)
+{
+	int ser_val = map(val, 0, 100, servo_open, servo_close);
+	servo1.writeMicroseconds(ser_val);
+	
+}
 void setup() {
 
   pinMode(SL1, OUTPUT);
@@ -598,7 +644,7 @@ void loop()
       digitalWrite(LED3, LOW);
 
     }
-    if(Angle_type == 'D')
+    if(Angle_type == 'D' || Angle_type == 'd')
     {
       Serial.println("Direct control");
       for(int i = 0; i < 6; i++)
@@ -607,7 +653,7 @@ void loop()
       }
       TransSPI();
     }
-    else if(Angle_type == 'I')
+    else if(Angle_type == 'I' || Angle_type == 'd')
     {
       Serial.println("Inverse kinematics");
       InverseKinematics(ResVal[0], ResVal[1], ResVal[2], ResVal[3], ResVal[4], ResVal[5]);
@@ -616,6 +662,16 @@ void loop()
         Serial.println(DH[i][0]);
       }
       TransSPI();
+    }
+    else if(Angle_type == 'S' || Angle_type == 's')
+    {
+    	Serial.println("Gripper move");
+    	servo(servo_res);
+    	if(Angle_type == 's')
+    	{
+    		Serial.print("Servo position: ");
+    		Serial.println(servo_res);
+    	}
     }
     else
     {
