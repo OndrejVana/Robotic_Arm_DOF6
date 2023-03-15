@@ -44,13 +44,13 @@ double ResVal[6] = {};
 double limits[6][2] = {{360, -360},{360, -360},{360, -360},{360, -360},{360, -360},{360, -360}}; // MAX, MIN
 
 //SPI Communication
-int SPI_com(uint16_t message, int slave)
+int SPI_com(int message, int slave)
 {
-  uint8_t mess_H =  message;
-  uint8_t mess_L = message >> 8;
+  uint8_t mess_L =  message;
+  uint8_t mess_H = message >> 8;
   uint8_t resMess_L = 0;
   uint8_t resMess_H = 0; 
-  uint16_t resMess = 0;
+  int resMess = 0;
   if(Angle_type == 'i'|| Angle_type == 'd')
   {
   	Serial.print("Slave: ");
@@ -638,45 +638,46 @@ void loop()
   {
     if(Serial.available() > 0)
     {
-      ReadPos();
-      digitalWrite(LED3, HIGH);
-      delay(150);
-      digitalWrite(LED3, LOW);
-
-    }
-    if(Angle_type == 'D' || Angle_type == 'd')
-    {
-      Serial.println("Direct control");
-      for(int i = 0; i < 6; i++)
-      {
-        DH[i][0] = ValLim(ResVal[i], limits[i][0], limits[i][1]);
-      }
-      TransSPI();
-    }
-    else if(Angle_type == 'I' || Angle_type == 'd')
-    {
-      Serial.println("Inverse kinematics");
-      InverseKinematics(ResVal[0], ResVal[1], ResVal[2], ResVal[3], ResVal[4], ResVal[5]);
-      for(int i = 0; i < 6; i++)
-      {
-        Serial.println(DH[i][0]);
-      }
-      TransSPI();
-    }
-    else if(Angle_type == 'S' || Angle_type == 's')
-    {
-    	Serial.println("Gripper move");
-    	servo(servo_res);
-    	if(Angle_type == 's')
+      	ReadPos();
+      	digitalWrite(LED3, HIGH);
+      
+      	if(Angle_type == 'D' || Angle_type == 'd')
     	{
-    		Serial.print("Servo position: ");
-    		Serial.println(servo_res);
+      		Serial.println("Direct control");
+      		for(int i = 0; i < 6; i++)
+      		{
+        		DH[i][0] = ValLim(ResVal[i], limits[i][0], limits[i][1]);
+      		}
+      		TransSPI();
     	}
-    }
-    else
-    {
-      Serial.println("Unknown command!");
-    }
-    delay(1000);
+    	else if(Angle_type == 'I' || Angle_type == 'i')
+    	{
+      		Serial.println("Inverse kinematics");
+      		InverseKinematics(ResVal[0], ResVal[1], ResVal[2], ResVal[3], ResVal[4], ResVal[5]);
+      		for(int i = 0; i < 6; i++)
+      		{
+        		Serial.println(DH[i][0]);
+      		}
+      		TransSPI();
+    	}
+    	else if(Angle_type == 'S' || Angle_type == 's')
+    	{
+    		Serial.println("Gripper move");
+    		servo(servo_res);
+    		if(Angle_type == 's')
+    		{
+    			Serial.print("Servo position: ");
+    			Serial.println(servo_res);
+    		}
+    	}
+    	else
+    	{
+      		Serial.println("Unknown command!");
+    	}
+    	//delay(1000);
+    	digitalWrite(LED3, LOW);
+  	}
+
   }
+    
 }
