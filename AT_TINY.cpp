@@ -10,9 +10,9 @@
 
 // user defines
 #define S_speed 600 
-#define F_speed 2600
-#define SenTimeFrq 250
-#define I2Ctime 500
+#define F_speed 5000
+#define SenTimeFrq 100
+#define I2Ctime 100
 
 //SPI pin defines
 #define MOSI_bp 1
@@ -26,7 +26,8 @@
 
 // Mainloop variables
 double SenVal;
-long SenTime;
+double LastAng;
+long long SenTime;
 
 // I2C addresses 
 int adrr = 0x36;
@@ -41,6 +42,7 @@ int low;
 word retVal = -1;
 int val;
 
+
 // SPI reading variables
 uint8_t receiveData = 0;
 uint8_t receiveData_L = 0;
@@ -49,11 +51,11 @@ uint8_t writeData = 0;
 uint8_t writeData_L = 0;
 uint8_t writeData_H = 0;
 int b_count = 1;
-uint16_t Ldata = 0;
+int Ldata = 0;
 
 // P regulator variables
 int wait_time;
-int kp = 5;
+int kp = 1;
 
 // SPI setup
 void SPI0_init(void)
@@ -73,6 +75,8 @@ void SPI0_init(void)
 ISR(SPI0_INT_vect)
 {
   receiveData = SPI0.DATA;
+  writeData = receiveData; 
+  SPI0.DATA = writeData;
  if(b_count == 1)
  {
  	receiveData_L = receiveData;
@@ -82,13 +86,12 @@ ISR(SPI0_INT_vect)
  {
  	receiveData_H = receiveData;
  	Ldata = 0;
- 	Ldata = receiveData_L << 8;
- 	Ldata = Ldata | receiveData_H;
+ 	Ldata = receiveData_H << 8;
+ 	Ldata = Ldata | receiveData_L;
  	b_count--;
  }
  
- writeData = receiveData; 
- SPI0.DATA = writeData;
+ 
  SPI0.INTFLAGS = SPI_IF_bm; /* Clear the Interrupt flag by writing 1 */
 }
 
@@ -106,11 +109,11 @@ bool find_dir(double val_r, double val_s)
 {
   if(val_r > val_s)
   {
-    return 0;
+    return 1;
   }
   else
   {
-    return 1; 
+    return 0; 
   }
 }
 
@@ -132,20 +135,18 @@ void stepp(double set_angle, double real_angle)
 }
 
 // solving an angle of multi rotation system
-double re_cal_angle(double angle_new, double angle_last)
+double re_cal_angle(double scaled_angle ,double angle_new, double angle_last)
 {
   double diff = angle_new - angle_last;
   if(diff > 180)
   {
-    double dif1 = 360 - angle_last;
-    diff = dif1 + angle_new; 
+    diff = angle_last + (360 - angle_new); 
   }
   else if(diff < -180)
   {
-    double dif1 = 0 - angle_last;
-    diff =  dif1 - angle_new;
+    diff =  angle_last - (360 - angle_new);
   }
-  return angle_last + diff;
+  return scaled_angle + diff;
 }
 
 // reading a value of angle 
@@ -211,14 +212,17 @@ void loop()
  	sei(); //global interrups
   startup(); //start diode indicator
   SenTime = millis();
-  SenVal = ReadAngle(); //first angle readings
+  //SenVal = ReadAngle(); //first angle readings
+  LastAng = ReadAngle();
   while(true)
   {
   	if((millis() - SenTime) > SenTimeFrq)
   	{
   		SenTime = millis();
-  		SenVal = ReadAngle(); //angle reading
+  		//SenVal = ReadAngle();
+  		SenVal = re_cal_angle(SenVal, ReadAngle(), LastAng); //angle reading
+  		LastAng = ReadAngle();
   	}
-    stepp(Ldata, SenVal); 
+  	stepp(Ldata, SenVal); 
   }
 }
